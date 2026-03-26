@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import aiClient from "../api/aiClient";
 import {
     PaperAirplaneIcon,
     DocumentArrowDownIcon,
@@ -9,14 +10,13 @@ import {
 } from '@heroicons/react/24/outline';
 
 export default function FormGeneration() {
-    // STATE QUẢN LÝ CHAT
+  
     const [messages, setMessages] = useState([
         { id: 1, sender: 'ai', text: 'Chào bạn! Tôi là trợ lý LegAI. Bạn cần tạo hợp đồng gì? (VD: Soạn hợp đồng dịch vụ tư vấn pháp lý, tôi là Công ty A, MST 12345, phí dịch vụ 50 triệu...)' }
     ]);
     const [inputValue, setInputValue] = useState('');
     const [isTyping, setIsTyping] = useState(false);
 
-    // STATE QUẢN LÝ BIỂU MẪU (Dựa trên cấu trúc chuẩn bạn cung cấp)
     const [currentTemplate, setCurrentTemplate] = useState('none');
     const [formData, setFormData] = useState({
         // Căn cứ pháp lý
@@ -46,38 +46,32 @@ export default function FormGeneration() {
         setFormData(prev => ({ ...prev, [field]: value }));
     };
 
-    const handleSendMessage = (e) => {
+    const handleSendMessage = async (e) => {
         e.preventDefault();
         if (!inputValue.trim()) return;
 
-        setMessages(prev => [...prev, { id: Date.now(), sender: 'user', text: inputValue }]);
+        const userMessage = inputValue;
+        setMessages(prev => [...prev, { id: Date.now(), sender: 'user', text: userMessage }]);
         setInputValue('');
         setIsTyping(true);
 
-        // Giả lập AI bóc tách dữ liệu
-        setTimeout(() => {
-            const mockApiResponse = {
-                chat_reply: "Tôi đã soạn thảo xong khung Hợp đồng dựa trên thông tin bạn cung cấp. Tôi đã điền sẵn Tên công ty, MST và Giá trị hợp đồng. Vui lòng kiểm tra và bổ sung các phần còn trống trên biểu mẫu bên phải!",
-                template_type: "hop_dong_tieu_chuan",
-                extracted_data: {
-                    benA_name: "Công ty Cổ phần Alpha",
-                    benA_id: "0101234567",
-                    benA_address: "123 Đường Nguyễn Văn Linh, Đà Nẵng",
-                    gia_tri_hop_dong: "50.000.000 VNĐ",
-                    noi_dung_chinh: "Bên B cung cấp dịch vụ tư vấn pháp lý thường xuyên cho Bên A theo yêu cầu.",
-                    thoi_han: "12",
-                    can_cu_luat: [
-                        "Bộ luật Dân sự số 91/2015/QH13;",
-                        "Luật Thương mại số 36/2005/QH11;"
-                    ]
-                }
-            };
+        // --- GỌI API THẬT ĐỂ BÓC TÁCH DỮ LIỆU (Dùng aiClient có Token) ---
+        try {
+            console.log("🚀 Đang gửi yêu cầu bóc tách biểu mẫu tới AI Engine...");
+            
+            const data = await aiClient.generateForm(userMessage);
+            
+            // Cập nhật giao diện với dữ liệu thật
+            setCurrentTemplate(data.template_type || "hop_dong_tieu_chuan");
+            setFormData(prev => ({ ...prev, ...data.extracted_data }));
+            setMessages(prev => [...prev, { id: Date.now() + 1, sender: 'ai', text: data.chat_reply }]);
 
-            setCurrentTemplate(mockApiResponse.template_type);
-            setFormData(prev => ({ ...prev, ...mockApiResponse.extracted_data }));
-            setMessages(prev => [...prev, { id: Date.now() + 1, sender: 'ai', text: mockApiResponse.chat_reply }]);
+        } catch (error) {
+            console.error("❌ Lỗi Form Generation:", error);
+            setMessages(prev => [...prev, { id: Date.now() + 1, sender: 'ai', text: "Xin lỗi, tôi gặp lỗi khi xử lý yêu cầu: " + (error.response?.data?.message || error.message) }]);
+        } finally {
             setIsTyping(false);
-        }, 2000);
+        }
     };
 
     const handlePrint = () => window.print();

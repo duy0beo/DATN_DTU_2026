@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import aiClient from "../api/aiClient";
 import { 
     DocumentChartBarIcon, 
     PlayIcon, 
@@ -57,23 +58,42 @@ export default function AIPlanning() {
         setAttachedFiles((prev) => prev.filter((_, index) => index !== indexToRemove));
     };
 
-    // Giả lập luồng Agentic Workflow
-    const handleAnalyze = () => {
+    // --- HÀM XỬ LÝ GỌI API THẬT ---
+    const handleAnalyze = async () => {
         if (!rawText.trim() && attachedFiles.length === 0) return;
+        
         setIsProcessing(true);
-        setProgress(1);
+        setPlanData(null); // Reset dữ liệu cũ
+        setProgress(1); // Bắt đầu bước 1: Gửi yêu cầu
 
-        setTimeout(() => setProgress(2), 2000);
+        try {
+            const formData = new FormData();
+            formData.append('rawText', rawText);
+            
+            // Đính kèm các file (nếu có)
+            attachedFiles.forEach((file) => {
+                formData.append('files', file);
+            });
 
-        setTimeout(() => {
+            console.log("🚀 Đang gửi yêu cầu lập kế hoạch tới AI Engine...");
+            
+            // Giả lập tiến trình UI (Bước 2) sau 1.5s để người dùng thấy log "Phân tích"
+            setTimeout(() => setProgress(2), 1500);
+
+            const data = await aiClient.generatePlanning(formData);
+            
+            // Thành công -> Bước 3
             setProgress(3);
-            setPlanData([
-                { id: 1, phase: 'Giai đoạn 1', title: 'Thu thập & Xác minh hồ sơ', assignee: 'Luật sư A', deadline: '3 ngày', status: 'pending' },
-                { id: 2, phase: 'Giai đoạn 2', title: 'Gửi công văn yêu cầu thanh toán', assignee: 'Trợ lý Pháp lý', deadline: '5 ngày', status: 'pending' },
-                { id: 3, phase: 'Giai đoạn 3', title: 'Khởi kiện ra Tòa án (Nếu cần)', assignee: 'Luật sư Trưởng', deadline: 'Chờ phản hồi', status: 'locked' },
-            ]);
+            setPlanData(data);
+            console.log("✅ Đã nhận được bản kế hoạch từ AI!");
+
+        } catch (error) {
+            console.error("❌ Lỗi AI Planning:", error);
+            alert("Không thể lập kế hoạch: " + error.message);
+            setProgress(0);
+        } finally {
             setIsProcessing(false);
-        }, 4500);
+        }
     };
 
     const glassPanel = "bg-black/60 backdrop-blur-2xl border border-white/10 shadow-[0_8px_30px_rgb(0,0,0,0.5)] rounded-3xl";

@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import axios from 'axios';
 import {
     ArrowLeftIcon, 
     ShieldCheckIcon,
@@ -9,6 +8,7 @@ import {
     CalendarIcon
 } from '@heroicons/react/24/outline';
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
+import aiClient from '../../api/aiClient'; // ✅ Import aiClient để gọi API có Token
 
 export default function RecordDetailPage() {
     const navigate = useNavigate();
@@ -20,29 +20,41 @@ export default function RecordDetailPage() {
     useEffect(() => {
         const fetchDetail = async () => {
             try {
-                // Gọi API lấy dữ liệu thật
-                const res = await axios.get(`http://localhost:8000/api/history/detail/${id}`);
-                if (res.data && res.data.success) {
-                    const data = res.data.data;
+                // 1. Dùng aiClient (Tự động kèm Authorization Bearer Token)
+                const res = await aiClient.getHistoryDetail(id);
+                
+                if (res && res.success) {
+                    const data = res.data;
                     setRecord(data);
                     
-                    // Parse nội dung JSON AI trả về từ SQL
+                    // Parse nội dung JSON AI trả về từ SQL (dbo.ContractHistory.AnalysisJson)
                     try {
-                        const parsedContent = JSON.parse(data.AnalysisJson || '{}');
-                        setAnalysis(parsedContent);
+                        const parsedContent = typeof data.AnalysisJson === 'string' 
+                            ? JSON.parse(data.AnalysisJson) 
+                            : data.AnalysisJson;
+                        setAnalysis(parsedContent || {});
                     } catch (e) {
                         console.error("Lỗi đọc dữ liệu JSON:", e);
+                        setAnalysis({});
                     }
+                } else {
+                    alert(res?.message || "Không tìm thấy hồ sơ.");
+                    navigate('/ho-so-phap-ly');
                 }
             } catch (error) {
-                console.error("Lỗi:", error);
-                alert("Không thể tải hồ sơ này.");
+                console.error("Lỗi chi tiết hồ sơ:", error);
+                if (error.response?.status === 403) {
+                    alert("Bạn không có quyền xem hồ sơ này.");
+                } else {
+                    alert("Không thể tải hồ sơ này. Vui lòng thử lại sau.");
+                }
+                navigate('/ho-so-phap-ly');
             } finally {
                 setLoading(false);
             }
         };
         fetchDetail();
-    }, [id]);
+    }, [id, navigate]);
 
     const handleBack = () => navigate(-1);
 

@@ -6,12 +6,14 @@ export default function AuthPage() {
     const navigate = useNavigate();
     const location = useLocation();
 
-    const [mode, setMode] = useState("LOGIN"); // LOGIN | REGISTER | FORGOT
+    const [mode, setMode] = useState("LOGIN"); // LOGIN | REGISTER | FORGOT | RESET
     const [loading, setLoading] = useState(false);
     const [form, setForm] = useState({
         fullName: "",
         email: "",
         password: "",
+        pin: "",         // Trường mới: Mã PIN từ email
+        newPassword: "",  // Trường mới: Mật khẩu mới
     });
 
     // If some pages navigate with state.mode
@@ -36,20 +38,14 @@ export default function AuthPage() {
                 if (!email || !password) return alert("Vui lòng nhập email và mật khẩu");
                 const res = await axios.post(`${backendBase}/auth/login`, { email, password });
                 if (res.data?.user) {
-                    // Ensure token is saved first so header can detect login
                     const token = res.data.token || res.data.accessToken || (res.data.data && res.data.data.token);
-                    if (token) {
-                        localStorage.setItem("accessToken", token);
-                    } else {
-                        // Fallback flag if backend doesn't return a token
-                        localStorage.setItem("accessToken", "true");
-                    }
+                    if (token) localStorage.setItem("accessToken", token);
+                    else localStorage.setItem("accessToken", "true");
 
                     localStorage.setItem("user", JSON.stringify(res.data.user));
                     localStorage.setItem("isLoggedIn", "true");
                     if (res.data.user.role) localStorage.setItem("userRole", res.data.user.role);
                     alert("Đăng nhập thành công");
-                    // Force full reload so header reads LocalStorage synchronously
                     window.location.href = "/";
                 } else {
                     alert(res.data?.message || "Đăng nhập thất bại");
@@ -58,23 +54,35 @@ export default function AuthPage() {
                 const { fullName, email, password } = form;
                 if (!fullName || !email || !password) return alert("Vui lòng điền đầy đủ thông tin");
                 const res = await axios.post(`${backendBase}/auth/register`, { fullName, email, password });
-                // Gửi đúng key "fullName" khớp với Backend.
                 if (res.data?.user) {
                     alert("Đăng ký thành công. Vui lòng đăng nhập");
                     setMode("LOGIN");
-                    setForm({ fullName: "", email: "", password: "" });
+                    setForm({ ...form, fullName: "", email: "", password: "" });
                 } else {
                     alert(res.data?.message || "Đăng ký thất bại");
                 }
             } else if (mode === "FORGOT") {
                 const { email } = form;
                 if (!email) return alert("Vui lòng nhập email");
-                try {
-                    await axios.post(`${backendBase}/auth/forgot-password`, { email });
-                    alert("Hướng dẫn khôi phục mật khẩu đã được gửi tới email");
-                } catch (err) {
-                    // API might not exist — fallback mock
-                    alert("Đã gửi mail (mô phỏng). Vui lòng kiểm tra hộp thư.");
+                const res = await axios.post(`${backendBase}/auth/forgot-password`, { email });
+                
+                if (res.data.success) {
+                    alert(res.data.message);
+                    setMode("RESET"); // Chuyển sang bước nhập mã PIN & mật khẩu mới
+                } else {
+                    alert(res.data.message || "Không thể thực hiện yêu cầu.");
+                }
+            } else if (mode === "RESET") {
+                const { email, pin, newPassword } = form;
+                if (!pin || !newPassword) return alert("Vui lòng nhập mã PIN và mật khẩu mới");
+                const res = await axios.post(`${backendBase}/auth/reset-password`, { email, pin, newPassword });
+                
+                if (res.data.success) {
+                    alert("Đổi mật khẩu thành công! Vui lòng đăng nhập bằng mật khẩu mới.");
+                    setMode("LOGIN");
+                    setForm({ ...form, password: "", pin: "", newPassword: "" });
+                } else {
+                    alert(res.data.message || "Mã PIN không chính xác hoặc đã hết hạn.");
                 }
             }
         } catch (err) {
@@ -93,49 +101,80 @@ export default function AuthPage() {
                         {mode === "LOGIN" && "Đăng nhập"}
                         {mode === "REGISTER" && "Đăng ký"}
                         {mode === "FORGOT" && "Quên mật khẩu"}
+                        {mode === "RESET" && "Đặt lại mật khẩu"}
                     </h1>
                     <p className="text-xs text-gray-300 mt-2">
                         {mode === "LOGIN" && "Đăng nhập để sử dụng dịch vụ LegalAI"}
                         {mode === "REGISTER" && "Tạo tài khoản mới"}
-                        {mode === "FORGOT" && "Nhập email để nhận hướng dẫn khôi phục"}
+                        {mode === "FORGOT" && "Nhập email để nhận mã PIN khôi phục"}
+                        {mode === "RESET" && "Nhập mã PIN từ email và mật khẩu mới"}
                     </p>
                 </div>
 
                 <form onSubmit={handleSubmit} className="space-y-4">
                     {mode === "REGISTER" && (
                         <div>
-                            <label className="block text-xs text-gray-300 mb-2">Họ và tên</label>
+                            <label className="block text-xs text-gray-300 mb-2 font-bold uppercase tracking-widest">Họ và tên</label>
                             <input
                                 name="fullName"
                                 value={form.fullName}
                                 onChange={onChange}
-                                className="w-full px-4 py-3 bg-[#080808] text-white rounded-xl border border-white/5 outline-none"
+                                className="w-full px-4 py-3 bg-[#080808] text-white rounded-xl border border-white/10 focus:border-cyan-500/50 outline-none transition-all"
                                 placeholder="Nguyễn Văn A"
                             />
                         </div>
                     )}
 
                     <div>
-                        <label className="block text-xs text-gray-300 mb-2">Email</label>
+                        <label className="block text-xs text-gray-300 mb-2 font-bold uppercase tracking-widest">Email</label>
                         <input
                             name="email"
                             type="email"
                             value={form.email}
                             onChange={onChange}
-                            className="w-full px-4 py-3 bg-[#080808] text-white rounded-xl border border-white/5 outline-none"
+                            readOnly={mode === "RESET"}
+                            className={`w-full px-4 py-3 bg-[#080808] text-white rounded-xl border border-white/10 outline-none focus:border-cyan-500/50 transition-all ${mode === "RESET" ? "opacity-50 cursor-not-allowed" : ""}`}
                             placeholder="email@domain.com"
                         />
                     </div>
 
-                    {mode !== "FORGOT" && (
+                    {mode === "RESET" && (
+                        <>
+                            <div>
+                                <label className="block text-xs text-cyan-400 mb-2 font-bold uppercase tracking-widest">Mã PIN (6 chữ số)</label>
+                                <input
+                                    name="pin"
+                                    type="text"
+                                    maxLength={6}
+                                    value={form.pin}
+                                    onChange={onChange}
+                                    className="w-full px-4 py-3 bg-[#080808] text-white rounded-xl border border-cyan-500/30 outline-none focus:border-cyan-500 transition-all text-center text-2xl font-black tracking-[10px]"
+                                    placeholder="000000"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs text-gray-300 mb-2 font-bold uppercase tracking-widest">Mật khẩu mới</label>
+                                <input
+                                    name="newPassword"
+                                    type="password"
+                                    value={form.newPassword}
+                                    onChange={onChange}
+                                    className="w-full px-4 py-3 bg-[#080808] text-white rounded-xl border border-white/10 outline-none focus:border-cyan-500/50 transition-all"
+                                    placeholder="Tối thiểu 6 ký tự"
+                                />
+                            </div>
+                        </>
+                    )}
+
+                    {(mode === "LOGIN" || mode === "REGISTER") && (
                         <div>
-                            <label className="block text-xs text-gray-300 mb-2">Mật khẩu</label>
+                            <label className="block text-xs text-gray-300 mb-2 font-bold uppercase tracking-widest">Mật khẩu</label>
                             <input
                                 name="password"
                                 type="password"
                                 value={form.password}
                                 onChange={onChange}
-                                className="w-full px-4 py-3 bg-[#080808] text-white rounded-xl border border-white/5 outline-none"
+                                className="w-full px-4 py-3 bg-[#080808] text-white rounded-xl border border-white/10 outline-none focus:border-cyan-500/50 transition-all"
                                 placeholder="Mật khẩu"
                             />
                         </div>
@@ -145,37 +184,37 @@ export default function AuthPage() {
                         <button
                             type="submit"
                             disabled={loading}
-                            className={`w-full py-3 rounded-xl font-bold uppercase tracking-wider ${loading ? "bg-gray-600 text-white cursor-not-allowed" : "bg-gradient-to-r from-blue-600 to-cyan-500 text-white"
+                            className={`w-full py-4 rounded-xl font-bold uppercase tracking-widest text-sm shadow-lg transition-all active:scale-95 ${loading ? "bg-gray-600 text-white cursor-not-allowed" : "bg-gradient-to-r from-blue-700 to-cyan-500 hover:from-blue-600 hover:to-cyan-400 text-white"
                                 }`}
                         >
-                            {loading ? "Đang xử lý..." : mode === "LOGIN" ? "Xác nhận truy cập" : mode === "REGISTER" ? "Hoàn tất đăng ký" : "Gửi email khôi phục"}
+                            {loading ? "Đang xử lý..." : mode === "LOGIN" ? "Đăng nhập ngay" : mode === "REGISTER" ? "Hoàn tất đăng ký" : mode === "FORGOT" ? "Gửi mã PIN" : "Xác nhận đổi mật khẩu"}
                         </button>
                     </div>
                 </form>
 
-                <div className="mt-6 text-center text-sm text-gray-300">
+                <div className="mt-8 text-center text-sm">
                     {mode === "LOGIN" && (
                         <>
-                            <p>
-                                Người dùng mới?{" "}
-                                <button className="text-cyan-400 font-bold" onClick={() => setMode("REGISTER")}>Đăng ký</button>
+                            <p className="text-gray-400">
+                                Chưa có tài khoản?{" "}
+                                <button className="text-cyan-400 font-bold hover:underline" onClick={() => setMode("REGISTER")}>Đăng ký ngay</button>
                             </p>
-                            <p className="mt-2">
-                                <button className="text-gray-300 underline" onClick={() => setMode("FORGOT")}>Quên mật khẩu?</button>
+                            <p className="mt-3">
+                                <button className="text-gray-500 hover:text-white transition-colors" onClick={() => setMode("FORGOT")}>Bạn quên mật khẩu?</button>
                             </p>
                         </>
                     )}
 
                     {mode === "REGISTER" && (
-                        <p>
-                            Đã có tài khoản?{" "}
-                            <button className="text-cyan-400 font-bold" onClick={() => setMode("LOGIN")}>Đăng nhập</button>
+                        <p className="text-gray-400">
+                            Đã là thành viên?{" "}
+                            <button className="text-cyan-400 font-bold hover:underline" onClick={() => setMode("LOGIN")}>Đăng nhập</button>
                         </p>
                     )}
 
-                    {mode === "FORGOT" && (
-                        <p>
-                            <button className="text-cyan-400 font-bold" onClick={() => setMode("LOGIN")}>Quay lại đăng nhập</button>
+                    {(mode === "FORGOT" || mode === "RESET") && (
+                        <p className="text-gray-400">
+                            <button className="text-gray-200 font-bold hover:text-cyan-400 transition-colors" onClick={() => setMode("LOGIN")}>← Quay lại đăng nhập</button>
                         </p>
                     )}
                 </div>

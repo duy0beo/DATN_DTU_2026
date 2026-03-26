@@ -2,7 +2,7 @@ const sql = require('mssql');
 
 const config = {
     user: 'sa',
-    password: '123456',
+    password: '123',
     server: 'localhost',
     database: 'LegalBotDB',
     options: {

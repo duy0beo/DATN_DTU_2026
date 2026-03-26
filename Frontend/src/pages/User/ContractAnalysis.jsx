@@ -49,59 +49,64 @@ export default function ContractAnalysis() {
         setResult(null);
         setProgress(0);
 
-        // Giả lập thanh chạy và nhảy text log
-        const interval = setInterval(() => {
+        // 1. THANH CHẠY THÔNG MINH (Chạy từ 0 đến 95% rồi dừng chờ API)
+        const progressInterval = setInterval(() => {
             setProgress((prev) => {
-                const nextProgress = prev < 90 ? prev + Math.random() * 15 : prev;
-                // Tính toán index của mảng text dựa trên % hoàn thành
-                const currentIdx = Math.floor((nextProgress / 100) * aiStatuses.length);
-                setStatusIndex(currentIdx < aiStatuses.length ? currentIdx : aiStatuses.length - 1);
-                return nextProgress;
+                if (prev < 30) return prev + 2; // Khởi đầu nhanh
+                if (prev < 70) return prev + 0.5; // Chậm lại ở giữa
+                if (prev < 95) return prev + 0.1; // Cực chậm khi đạt 95%
+                return prev;
             });
-        }, 400);
+        }, 100);
+
+        // 2. TEXT LOG THÔNG MINH (Nhảy text dựa trên thời gian)
+        const logInterval = setInterval(() => {
+            setStatusIndex((prev) => (prev < aiStatuses.length - 1 ? prev + 1 : prev));
+        }, 3000);
 
         try {
-            // Gọi AI Engine
+            // --- GỌI API THẬT TỪ AI ENGINE ---
+            console.log("🚀 Đang gửi file thẩm định tới LegAI Engine...");
             const aiResult = await aiClient.analyzeContract(file);
             const analysis = aiResult?.data ?? aiResult;
 
+            // Dừng progress và log giả lập
+            clearInterval(progressInterval);
+            clearInterval(logInterval);
+            
+            // Nhảy vọt lên 100% khi có dữ liệu
             setProgress(100);
+            setStatusIndex(aiStatuses.length - 1);
 
-            // Hiện kết quả sau 0.5s
+            // Hoàn tất phân tích và hiển thị kết quả
             setTimeout(async () => {
                 setResult(analysis);
 
-                // --- BẮT ĐẦU ĐOẠN LƯU VÀO CSDL ---
+                // --- TỰ ĐỘNG LƯU VÀO LỊCH SỬ SQL (Dùng aiClient có Token) ---
                 try {
                     const userStr = localStorage.getItem("user");
                     if (userStr) {
-                        const user = JSON.parse(userStr);
-                        const userId = user.id ?? user.Id ?? user.ID;
-                        const riskScore = analysis?.risk_score ?? analysis?.riskScore ?? 0;
-
                         const payload = {
-                            userId,
                             fileName: file.name,
-                            riskScore,
+                            riskScore: analysis?.risk_score ?? analysis?.riskScore ?? 0,
                             content: JSON.stringify(analysis)
                         };
 
-                        await axios.post('http://localhost:8000/api/history/save', payload);
-                        alert("✅ Kết quả đã được lưu vào Hồ sơ pháp lý!");
-                    } else {
-                        alert("⚠️ Bạn đang xem với tư cách Khách. Hãy đăng nhập để lưu kết quả.");
+                        await aiClient.saveHistory(payload);
+                        console.log("✅ Tự động lưu lịch sử thành công!");
                     }
                 } catch (saveErr) {
                     console.error("Lỗi lưu SQL:", saveErr);
                 }
-                // --- KẾT THÚC ĐOẠN LƯU ---
-            }, 500);
+                
+                setIsAnalyzing(false);
+            }, 600);
 
         } catch (error) {
-            console.error("Lỗi phân tích:", error);
-            alert("Có lỗi khi kết nối với LegAI. Vui lòng thử lại!");
-        } finally {
-            clearInterval(interval);
+            clearInterval(progressInterval);
+            clearInterval(logInterval);
+            console.error("Lỗi thẩm định AI:", error);
+            alert("Rất tiếc, LegAI gặp sự cố khi kết nối: " + (error.response?.data?.error || error.message));
             setIsAnalyzing(false);
         }
     };

@@ -1,20 +1,27 @@
 import axios from "axios";
 
-// 1. Cấu hình Axios Instance (Kết nối đến AI Server)
-// Lưu ý: Đảm bảo biến môi trường VITE_AI_API_URL="http://localhost:8000/api"
 const axiosInstance = axios.create({
-    baseURL: import.meta.env.VITE_AI_API_URL,
+    baseURL: import.meta.env.VITE_AI_API_URL || 'http://localhost:8000/api',
     headers: {
         "Content-Type": "application/json",
     },
 });
 
-// 2. Định nghĩa các chức năng
+axiosInstance.interceptors.request.use(
+    (config) => {
+        const token = localStorage.getItem("accessToken");
+        if (token) {
+            config.headers.Authorization = `Bearer ${token}`;
+        }
+        return config;
+    },
+    (error) => {
+        return Promise.reject(error);
+    }
+);
+
 const aiClient = {
-    /**
-     * Chức năng 1: Chat với Bot (Dùng cho ChatbotAI.jsx)
-     * Endpoint: /api/chat/ask
-     */
+  
     ask: async (question) => {
         try {
             const response = await axiosInstance.post('/chat/ask', { question });
@@ -25,19 +32,12 @@ const aiClient = {
         }
     },
 
-    /**
-     * Chức năng 2: Thẩm định Hợp đồng (Dùng cho trang Booking/ContractReview mới)
-     * Endpoint: /api/ai/analyze-contract
-     * Input: contractText (Nội dung hợp đồng dạng chữ)
-     * Output: JSON { risk_score, risks, ... }
-     */
+ 
     analyzeContract: async (fileObject) => {
         try {
             const formData = new FormData();
-            // Key này phải là 'file' để khớp với upload.single('file') ở Backend
             formData.append('file', fileObject);
 
-            // Gọi axiosInstance nhưng GHI ĐÈ header Content-Type
             const response = await axiosInstance.post('/ai/analyze-contract', formData, {
                 headers: {
                     "Content-Type": "multipart/form-data",
@@ -47,6 +47,72 @@ const aiClient = {
             return response.data;
         } catch (error) {
             console.error("Lỗi khi gọi API Phân tích:", error);
+            throw error;
+        }
+    },
+
+    generatePlanning: async (formData) => {
+        try {
+            const response = await axiosInstance.post('/ai/generate-planning', formData, {
+                headers: {
+                    "Content-Type": "multipart/form-data",
+                },
+            });
+            return response.data;
+        } catch (error) {
+            console.error("Lỗi khi gọi API Planning:", error);
+            throw error;
+        }
+    },
+
+  
+    generateForm: async (message) => {
+        try {
+            const response = await axiosInstance.post('/ai/generate-form', { message });
+            return response.data;
+        } catch (error) {
+            console.error("Lỗi khi gọi API Form:", error);
+            throw error;
+        }
+    },
+
+   
+    saveHistory: async (payload) => {
+        try {
+            const response = await axiosInstance.post('/history/save', payload);
+            return response.data;
+        } catch (error) {
+            console.error("Lỗi khi lưu lịch sử:", error);
+            throw error;
+        }
+    },
+
+    getHistory: async () => {
+        try {
+            const response = await axiosInstance.get('/history/list');
+            return response.data;
+        } catch (error) {
+            console.error("Lỗi khi lấy lịch sử:", error);
+            throw error;
+        }
+    },
+
+    getHistoryDetail: async (id) => {
+        try {
+            const response = await axiosInstance.get(`/history/detail/${id}`);
+            return response.data;
+        } catch (error) {
+            console.error("Lỗi khi lấy chi tiết lịch sử:", error);
+            throw error;
+        }
+    },
+
+    deleteHistory: async (id) => {
+        try {
+            const response = await axiosInstance.delete(`/history/delete/${id}`);
+            return response.data;
+        } catch (error) {
+            console.error("Lỗi khi xóa lịch sử:", error);
             throw error;
         }
     }

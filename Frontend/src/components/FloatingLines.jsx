@@ -11,10 +11,8 @@ import {
   Clock
 } from 'three';
 
-// Đường dẫn import CSS từ thư mục src
 import '../FloatingLines.css';
 
-// --- PHẦN 1: SHADERS (Giữ nguyên bản gốc siêu đẹp của bạn) ---
 const vertexShader = `
 precision highp float;
 void main() {
@@ -221,7 +219,19 @@ export default function FloatingLines({
     const camera = new OrthographicCamera(-1, 1, 1, -1, 0, 1);
     camera.position.z = 1;
 
-    const renderer = new WebGLRenderer({ antialias: false, alpha: true });
+    let renderer;
+    try {
+      renderer = new WebGLRenderer({ 
+        antialias: false, 
+        alpha: true,
+        powerPreference: 'high-performance',
+        failIfMajorPerformanceCaveat: true 
+      });
+    } catch (e) {
+      console.warn("⚠️ WebGL context could not be created for FloatingLines background:", e);
+      return; 
+    }
+
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
     containerRef.current.appendChild(renderer.domElement);
     rendererRef.current = renderer;

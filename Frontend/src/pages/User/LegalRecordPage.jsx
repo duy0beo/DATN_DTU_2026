@@ -9,6 +9,7 @@ import {
     DocumentTextIcon,
     ArrowPathIcon // Icon loading
 } from '@heroicons/react/24/outline';
+import aiClient from '../../api/aiClient'; // ✅ Import aiClient để gọi API có Token
 import CreateRecordModal from "../../components/CreateRecordModal";
 import LegalRecordItem from "../../components/LegalRecordItem";
 
@@ -17,40 +18,35 @@ export default function LegalRecordPage() {
     const [searchTerm, setSearchTerm] = useState("");
     const [isModalOpen, setIsModalOpen] = useState(false);
 
-    // ✅ State dữ liệu thật
+    // ✅ Dữ liệu thật từ SQL Server
     const [records, setRecords] = useState([]); 
     const [loading, setLoading] = useState(true);
 
-    //  Gọi API lấy dữ liệu thật từ SQL
+    // Gọi API lấy dữ liệu lịch sử của Người dùng hiện tại
     useEffect(() => {
         const fetchHistory = async () => {
             try {
-                // // 1. Kiểm tra đăng nhập
-                // const userStr = localStorage.getItem("user");
-                // if (!userStr) {
-                //     navigate('/'); // Nếu chưa đăng nhập thì về trang chủ hoặc login
-                //     return;
-                // }
+                // 1. Dùng aiClient (Tự động kèm Authorization Bearer Token)
+                const res = await aiClient.getHistory();
 
-                // const user = JSON.parse(userStr);
-                // const userId = user.id ?? user.Id ?? user.ID;
-
-                // 2. Gọi API Backend
-                const res = await axios.get(`http://localhost:8000/api/history/${userId}`);
-
-                if (res.data && res.data.success) {
-                    // 3. Map dữ liệu SQL sang format của Giao diện cũ
-                    const formattedRecords = res.data.data.map(item => ({
+                if (res && res.success) {
+                    // 2. Map dữ liệu từ SQL (dbo.ContractHistory) sang Giao diện
+                    const formattedRecords = res.data.map(item => ({
                         id: item.Id,
-                        name: item.FileName,
-                        date: new Date(item.CreatedAt).toLocaleDateString('vi-VN'),
-                        riskScore: item.RiskScore, // Thêm điểm số để hiển thị nếu cần
-                        fullData: item // Lưu trữ dữ liệu gốc
+                        name: item.FileName || "Tài liệu không tên",
+                        date: new Date(item.CreatedAt || item.AnalysisAt).toLocaleDateString('vi-VN'),
+                        riskScore: item.RiskScore,
+                        fullData: item 
                     }));
                     setRecords(formattedRecords);
                 }
             } catch (error) {
-                console.error("Lỗi tải dữ liệu:", error);
+                console.error("Lỗi tải dữ liệu lịch sử:", error);
+                // Nếu lỗi 401 (Unauthorized) có thể chuyển về Login nếu cần
+                if (error.response?.status === 401) {
+                    // localStorage.clear();
+                    // navigate('/login');
+                }
             } finally {
                 setLoading(false);
             }

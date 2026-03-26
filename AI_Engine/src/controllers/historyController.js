@@ -3,8 +3,11 @@ const { sql, pool, poolConnect } = require('../config/db');
 // 1. Lưu kết quả phân tích
 exports.saveAnalysis = async (req, res) => {
   try {
-    const { userId, fileName, riskScore, content } = req.body;
-    if (!userId || !fileName) return res.status(400).json({ success: false, message: 'userId and fileName required' });
+    // LẤY USERID TỪ DECODED TOKEN (DO MIDDLEWARE GÁN)
+    const userId = req.user.id;
+    const { fileName, riskScore, content } = req.body;
+
+    if (!fileName) return res.status(400).json({ success: false, message: 'fileName required' });
 
     await poolConnect;
     const request = pool.request();
@@ -29,11 +32,11 @@ exports.saveAnalysis = async (req, res) => {
   }
 };
 
-// 2. Lấy danh sách lịch sử theo User
+// 2. Lấy danh sách lịch sử của chính người dùng hiện tại
 exports.getHistory = async (req, res) => {
   try {
-    const userId = req.params.userId;
-    if (!userId) return res.status(400).json({ success: false, message: 'userId required' });
+    // KHÔNG TIN TƯỞNG PARAM - DÙNG USERID TỪ TOKEN ĐỂ BẢO MẬT
+    const userId = req.user.id;
 
     await poolConnect;
     const request = pool.request();
@@ -48,10 +51,12 @@ exports.getHistory = async (req, res) => {
   }
 };
 
-// 3. Lấy chi tiết 1 hồ sơ (MỚI)
+// 3. Lấy chi tiết 1 hồ sơ
 exports.getDetail = async (req, res) => {
   try {
     const id = req.params.id;
+    const userId = req.user.id; // Để kiểm tra quyền sở hữu
+
     if (!id) return res.status(400).json({ success: false, message: 'id required' });
 
     await poolConnect;
@@ -64,6 +69,11 @@ exports.getDetail = async (req, res) => {
     const row = result.recordset && result.recordset[0];
     if (!row) return res.status(404).json({ success: false, message: 'Not found' });
 
+    // KIỂM TRA QUYỀN SỞ HỮU TRƯỚC KHI TRẢ VỀ DỮ LIỆU
+    if (row.UserId != userId) {
+        return res.status(403).json({ success: false, message: 'Forbidden: You do not own this record' });
+    }
+
     return res.json({ success: true, data: row });
   } catch (err) {
     console.error('Get Detail Error:', err);
@@ -71,24 +81,32 @@ exports.getDetail = async (req, res) => {
   }
 };
 
-// 4. Xóa hồ sơ (MỚI)
+// 4. Xóa hồ sơ
 exports.deleteHistory = async (req, res) => {
   try {
     const id = req.params.id;
+    const userId = req.user.id;
+
     if (!id) return res.status(400).json({ success: false, message: 'id required' });
 
     await poolConnect;
     const request = pool.request();
     request.input('Id', sql.BigInt, id);
 
+    // KIỂM TRA QUYỀN SỞ HỮU TRƯỚC KHI XÓA
+    const checkSql = `SELECT UserId FROM dbo.ContractHistory WHERE Id = @Id`;
+    const checkResult = await request.query(checkSql);
+    const row = checkResult.recordset && checkResult.recordset[0];
+    
+    if (!row) return res.status(404).json({ success: false, message: 'Not found' });
+    if (row.UserId != userId) {
+        return res.status(403).json({ success: false, message: 'Forbidden: You cannot delete this record' });
+    }
+
     const deleteSql = `DELETE FROM dbo.ContractHistory WHERE Id = @Id`;
     const result = await request.query(deleteSql);
 
-    const affected = result.rowsAffected && result.rowsAffected[0];
-    if (!affected || affected === 0) {
-      return res.status(404).json({ success: false, message: 'Not found or already deleted' });
-    }
-    return res.json({ success: true });
+    return res.json({ success: true, message: "Deleted successfully" });
   } catch (err) {
     console.error('Delete History Error:', err);
     return res.status(500).json({ success: false, message: err.message });
